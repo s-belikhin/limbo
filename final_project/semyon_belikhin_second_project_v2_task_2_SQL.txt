@@ -1,0 +1,350 @@
+Код SQL
+
+-- 2.1 Образовательные курсы состоят из различных уроков, каждый из которых состоит из нескольких маленьких заданий. Каждое такое маленькое задание называется "горошиной".
+
+-- Назовём очень усердным учеником того пользователя, который хотя бы раз за текущий месяц правильно решил 20 горошин.
+
+-- Необходимо написать оптимальный запрос, который даст информацию о количестве очень усердных студентов.NB! Под усердным студентом мы понимаем студента, который правильно решил 20 задач за текущий месяц.
+
+SELECT
+    year,
+    month,
+    COUNT(count_of_success) AS num_very_diligent_student
+FROM
+    (SELECT
+        EXTRACT(YEAR FROM timest) AS year,
+        EXTRACT(MONTH FROM timest) AS month,
+        COUNT(st_id) AS count_of_success
+    FROM
+        default.peas
+    WHERE
+        correct = 1
+    GROUP BY
+        year,
+        month,
+        st_id
+    HAVING
+        count_of_success >= 20) as a
+GROUP BY
+    year,
+    month
+
+
+-- 2.2 Образовательная платформа предлагает пройти студентам курсы по модели trial: студент может решить бесплатно лишь 30 горошин в день. Для неограниченного количества заданий в определенной дисциплине студенту необходимо приобрести полный доступ. Команда провела эксперимент, где был протестирован новый экран оплаты.
+
+-- Необходимо в одном запросе выгрузить следующую информацию о группах пользователей:
+
+-- ARPU, считается относительно всех пользователей, попавших в группы 
+-- ARPAU 
+-- CR в покупку 
+-- СR активного пользователя в покупку 
+-- CR пользователя из активности по математике (subject = ’math’) в покупку курса по математике
+
+-- Активным считается пользователь, за все время решивший больше 10 задач правильно в любых дисциплинах.
+
+-- Активным по математике считается пользователь, за все время решивший 2 или больше задач правильно по математике.
+
+
+
+SELECT
+
+    test_grp,
+    ARPPU*CR AS ARPU,
+    ARPPU,
+    count_of_clients / count_of_users  AS CR,
+    count_of_active_clients / count_active_users  AS CR_active,
+    count_of_active_clients_in_math / count_active_users_in_math  AS CR_math_active 
+
+FROM
+(
+SELECT
+
+    count_of_active_clients / count_active_users  AS CR,
+    count_active_users,
+    count_of_active_clients,
+    ARPPU,
+    count_of_users,    
+    count_of_clients,
+    count_active_users_in_math,
+    count_of_active_clients_in_math,    
+    test_grp
+
+FROM
+
+(
+SELECT
+
+    count_of_active_clients / count_active_users  AS CR,
+    count_active_users,
+    count_of_active_clients,
+    ARPPU,
+    count_of_users,    
+    count_of_clients,
+    test_grp
+
+FROM
+
+(SELECT 
+    count_of_active_clients / count_active_users  AS CR,
+    count_active_users,
+    count_of_active_clients,
+    ARPPU, 
+    test_grp
+FROM    
+
+-- конверсия активных пользователей
+(SELECT 
+    count_active_users,
+    count_of_active_clients,
+    test_grp
+FROM
+-- активные пользователи
+(
+SELECT COUNT(DISTINCT st_id) AS count_active_users,
+    test_grp
+FROM (
+    SELECT
+        COUNT(st_id) AS count_of_success,
+        st_id
+    FROM
+        default.peas
+    WHERE
+        correct = 1
+    GROUP BY
+        st_id
+    HAVING
+        count_of_success >= 10) as l
+    JOIN
+    default.studs AS r
+    
+    ON l.st_id = r.st_id
+
+GROUP BY
+    test_grp
+) as count_active_users_
+    
+JOIN
+--- число активных клиентов    
+(
+SELECT
+    COUNT(DISTINCT st_id) as count_of_active_clients,
+    test_grp
+FROM
+    (SELECT
+        A.st_id AS st_id
+    FROM
+        default.final_project_check AS A
+    JOIN
+        (
+    SELECT
+        COUNT(st_id) AS count_of_success,
+        st_id
+    FROM
+        default.peas
+    WHERE
+        correct = 1
+    GROUP BY
+        st_id
+    HAVING
+        count_of_success >= 10) AS active_students
+        
+        ON A.st_id = active_students.st_id) as right_
+    JOIN
+    default.studs AS left_
+    
+    ON right_.st_id = left_.st_id
+
+GROUP BY
+    test_grp    
+) as count_of_active_clients_
+ON count_active_users_.test_grp = count_of_active_clients_.test_grp ) AS CR_active_
+
+JOIN
+
+-- ARPPU
+(SELECT 
+    (COUNT(*) / COUNT(DISTINCT st_id)) * (SUM(money) / COUNT(*)) AS ARPPU,
+    test_grp
+FROM
+(
+    SELECT
+        A.st_id AS st_id,
+        A.sale_time AS sale_time,
+        A.money AS money,
+        A.subject AS subject,
+        B.test_grp AS test_grp
+    FROM
+        default.final_project_check AS A
+    LEFT JOIN
+        default.studs AS B 
+        ON A.st_id = B.st_id
+)
+GROUP BY
+    test_grp) AS ARPPU_
+    
+ON CR_active_.test_grp = ARPPU_.test_grp
+
+GROUP BY
+    test_grp,
+    count_of_active_clients,
+    count_active_users,
+    ARPPU) AS CR_ARPPU
+
+JOIN
+
+(
+-- количество пользователей и клиентов, где:
+SELECT
+    count_of_users,
+    count_of_clients,
+    test_grp
+FROM
+-- количество пользователей
+(
+SELECT COUNT(DISTINCT st_id) AS count_of_users,
+    test_grp
+FROM default.studs
+GROUP BY
+    test_grp
+
+) AS count_of_users_ 
+
+JOIN
+-- количество клиентов
+
+(
+SELECT COUNT(DISTINCT st_id) AS count_of_clients,
+    test_grp
+FROM
+(
+    SELECT
+        A.st_id AS st_id,
+        A.sale_time AS sale_time,
+        A.money AS money,
+        A.subject AS subject,
+        B.test_grp AS test_grp
+    FROM
+        default.final_project_check AS A
+    LEFT JOIN
+        default.studs AS B 
+        ON A.st_id = B.st_id)
+GROUP BY
+    test_grp
+
+) AS count_of_clients_  
+
+ON count_of_users_.test_grp = count_of_clients_.test_grp
+
+GROUP BY
+    test_grp,
+    count_of_users,
+    count_of_clients
+) as count_of_users_and_clients
+
+ON count_of_users_and_clients.test_grp = CR_ARPPU.test_grp
+
+GROUP BY
+    count_active_users,
+    count_of_active_clients,
+    ARPPU,
+    count_of_users,    
+    count_of_clients,
+    test_grp
+) AS ARPPU_CR_count_of_active
+
+JOIN
+
+(
+
+-- активные клиенты и пользователи по матиматике, где..
+SELECT 
+    count_active_users_in_math,
+    count_of_active_clients_in_math,
+    test_grp
+FROM
+-- ..активные пользователи по математике
+(
+SELECT COUNT(DISTINCT st_id) AS count_active_users_in_math,
+    test_grp
+FROM (
+    SELECT
+        COUNT(st_id) AS count_of_success,
+        st_id
+    FROM
+        default.peas
+    WHERE
+        correct = 1 and subject = 'Math'
+    GROUP BY
+        st_id
+    HAVING
+        count_of_success >= 2) as l
+    JOIN
+    default.studs AS r
+    
+    ON l.st_id = r.st_id
+
+GROUP BY
+    test_grp
+    
+) as count_active_users_in_math_
+    
+JOIN
+--- ..число активных клиентов по матиматике    
+(
+SELECT
+    COUNT(DISTINCT st_id) as count_of_active_clients_in_math,
+    test_grp
+FROM
+    (SELECT
+        A.st_id AS st_id
+    FROM
+        default.final_project_check AS A
+    JOIN
+        (
+    SELECT
+        COUNT(st_id) AS count_of_success,
+        st_id
+    FROM
+        default.peas
+    WHERE
+        correct = 1 and subject = 'Math'
+    GROUP BY
+        st_id
+    HAVING
+        count_of_success >= 2) AS active_students_in_matn
+        
+        ON A.st_id = active_students_in_matn.st_id) as right_
+    JOIN
+    default.studs AS left_
+    
+    ON right_.st_id = left_.st_id
+
+GROUP BY
+    test_grp    
+) as count_of_active_clients_in_math_
+
+ON count_active_users_in_math_.test_grp = count_of_active_clients_in_math_.test_grp
+
+GROUP BY
+    count_active_users_in_math,
+    count_of_active_clients_in_math,
+    test_grp
+) AS math
+
+ON ARPPU_CR_count_of_active.test_grp = math.test_grp
+
+GROUP BY
+    count_active_users,
+    count_of_active_clients,
+    ARPPU,
+    count_of_users,    
+    count_of_clients,
+    count_active_users_in_math,
+    count_of_active_clients_in_math,    
+    test_grp
+)
+
+
+ORDER BY test_grp ASC
+
+-- Вывод: внедряем
